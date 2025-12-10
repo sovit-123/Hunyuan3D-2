@@ -79,9 +79,13 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False,
-                        device='cuda', mv_adapter_model_class=MVAdapterI2MVSDXLPipeline, baking_pipeline='hunyuan'):
+    def from_pretrained(cls, 
+                        model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False,
+                        device='cuda', mv_adapter_model_class=MVAdapterI2MVSDXLPipeline, baking_pipeline='hunyuan',
+                        low_vram_mode=False
+                        ):
         original_model_path = model_path
+        print('In pretrained...')
         if not os.path.exists(model_path):
             # try local path
             base_dir = os.environ.get('HY3DGEN_MODELS', '~/.cache/hy3dgen')
@@ -110,20 +114,21 @@ class Hunyuan3DPaintPipeline:
                                              device=device,
                                              mv_adapter_model_class=mv_adapter_model_class,
                                              baking_pipeline=baking_pipeline
-                                             ), local_files_only=local_files_only)
+                                             ), local_files_only=local_files_only, low_vram_mode=low_vram_mode)
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
 
-    def __init__(self, config, local_files_only=False):
+    def __init__(self, config, local_files_only=False, low_vram_mode=False):
+        print('In INIT')
         self.config = config
         self.models = {}
         self.render = MeshRender(
             default_resolution=self.config.render_size,
             texture_size=self.config.texture_size)
 
-        self.load_models(local_files_only=local_files_only)
+        self.load_models(local_files_only=local_files_only, low_vram_mode=low_vram_mode)
 
-    def load_models(self, local_files_only=False):
+    def load_models(self, local_files_only=False, low_vram_mode=False):
         # empty cuda cache
         torch.cuda.empty_cache()
         # Load model
@@ -135,11 +140,13 @@ class Hunyuan3DPaintPipeline:
         self.models['t2i_model'] = None
         if self.config.mv_model == 'hunyuan3d-paint-v2-0' or self.config.mv_model == 'hunyuan3d-paint-v2-0-turbo':
             from .utils.multiview_utils import Multiview_Diffusion_Net
-            self.models['multiview_model'] = Multiview_Diffusion_Net(self.config, local_files_only=local_files_only)
-            t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
-                                              local_files_only=local_files_only,
-                                              device=self.config.device)
-            self.models['t2i_model'] = t2i_pipeline
+            self.models['multiview_model'] = Multiview_Diffusion_Net(
+                self.config, local_files_only=local_files_only, low_vram_mode=low_vram_mode
+            )
+            # t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
+            #                                   local_files_only=local_files_only,
+            #                                   device=self.config.device)
+            # self.models['t2i_model'] = t2i_pipeline
 
         elif self.config.mv_model == 'mv-adapter':
             from .mvadapter.pipeline import MVAdapterPipelineWrapper

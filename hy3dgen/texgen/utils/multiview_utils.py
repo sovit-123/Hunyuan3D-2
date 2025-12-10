@@ -23,7 +23,8 @@ from diffusers import EulerAncestralDiscreteScheduler, LCMScheduler
 
 
 class Multiview_Diffusion_Net():
-    def __init__(self, config, local_files_only=False) -> None:
+    def __init__(self, config, local_files_only=False, low_vram_mode=False) -> None:
+        print(low_vram_mode)
         self.device = config.device
         self.view_size = 512
         multiview_ckpt_path = config.multiview_ckpt_path
@@ -31,9 +32,21 @@ class Multiview_Diffusion_Net():
         current_file_path = os.path.abspath(__file__)
         custom_pipeline_path = os.path.join(os.path.dirname(current_file_path), '..', 'hunyuanpaint')
 
-        pipeline = DiffusionPipeline.from_pretrained(
-            multiview_ckpt_path,
-            custom_pipeline=custom_pipeline_path, torch_dtype=torch.float16, local_files_only=local_files_only)
+        if low_vram_mode:
+            pipeline = DiffusionPipeline.from_pretrained(
+                multiview_ckpt_path,
+                custom_pipeline=custom_pipeline_path, 
+                torch_dtype=torch.float16, 
+                local_files_only=local_files_only, 
+                device_map="balanced"
+            )
+        else:
+            pipeline = DiffusionPipeline.from_pretrained(
+                multiview_ckpt_path,
+                custom_pipeline=custom_pipeline_path, 
+                torch_dtype=torch.float16, 
+                local_files_only=local_files_only
+            )
 
         if config.pipe_name in ['hunyuanpaint']:
             pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config,
@@ -45,9 +58,9 @@ class Multiview_Diffusion_Net():
             # pipeline.prepare() 
 
         pipeline.set_progress_bar_config(disable=True)
-        if config.device == 'cuda':
+        if config.device == 'cuda' and not low_vram_mode:
             self.pipeline = pipeline.to(self.device)
-        else:
+        elif low_vram_mode:
             self.pipeline = pipeline
 
     def seed_everything(self, seed):
